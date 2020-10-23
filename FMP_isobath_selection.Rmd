@@ -1,0 +1,227 @@
+---
+title: "Depth ranges of main GOA species"
+author: "Alberto Rovellini"
+date: "10/14/2020"
+output: 
+  html_document:
+    code_folding: hide
+
+---
+
+Section 1 of this document plots the depth ranges of different life stages of the main GOA species included in the 2019 Fishery Management Plan fo Groundfish for the GOA (https://www.npfmc.org/wp-content/PDFdocuments/fmp/GOA/GOAfmp.pdf). Depth ranges are derived from Essential Fish Habitat as general distribution habitat:
+
+*EFH is defined in the Magnuson-Stevens Fishery Conservation and Management Act (Magnuson-Stevens Act) as “those waters and substrate necessary to fish for spawning, breeding, feeding, or growth to maturity.” EFH for groundfish species is determined to be the general distribution of a species described by life stage. General distribution is a subset of a species’ total population distribution, and is identified as the distribution of 95 percent of the species population, for a particular life stage, if life history data are available for the species. Where information is insufficient and a suitable proxy cannot be inferred, EFH is not described. General distribution is used to describe EFH for all stock conditions whether or not higher levels of information exist, because the available higher level data are not sufficiently comprehensive to account for changes in stock distribution (and thus habitat use) over time. EFH is described for FMP-managed species by life stage as general distribution using guidance from the EFH Final Rule (50 CFR 600.815), including the EFH Level of Information definitions. New analytical tools are used and recent scientific information is incorporated for each life history stage from updated scientific habitat assessment reports (see Appendix F to NMFS 2005, NPFMC and NMFS 2010, and Simpson et al. 2017). EFH descriptions include both text (Section 4.2.2.2) and maps (Section 4.2.2.3 and Appendix E), if information is available for a species’ particular life stage. These descriptions are risk averse, supported by scientific rationale, and account for changing oceanographic conditions, regime shifts, and the seasonality of migrating fish stocks.*
+
+Section 2 of this document does the same with depths I obtained from other sources. Species considered here were some of the most important stocks in terms of landings and revenues for AK, as reported from https://foss.nmfs.noaa.gov/apexfoss/f?p=215:200:16664047398932::NO:::. Most values are from Allen and Smith (1988), which provide broad estimates and records of deepest occurrences throughout the GOA. Data for Arrowtooth flounder from Doyle et al. (2018), data for early juveniles from Pirtle et al. (2019), data for Pacific halibut from IPHC (2014). see Google Sheet for references of those sources. See Sheet for notes regarding the depth values.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=11, fig.height=8)
+```
+
+```{r}
+
+library(googlesheets4)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(reshape2)
+library(ggplot2)
+
+```
+
+# Section 1. Depth ranges estimated from EFH (NPFMC 2019).
+
+Read input from Google Sheets (you should be able to skip the authentication token, contact me at alberto.rovellini@gmail.com if not).
+
+```{r}
+
+gs4_deauth() # do not prompt google authentication
+
+FMP.data <- read_sheet("https://docs.google.com/spreadsheets/d/1YJnz2yS42txHQ_tSls6edW8jv553DwQSlSU4corQ0x0/edit#gid=362642674", sheet = 2) 
+
+```
+
+Prepare the data as long format.
+
+```{r}
+
+FMP.data <- FMP.data %>% dplyr::select(
+  -"Species name"
+)
+
+FMP.long <- melt(FMP.data, id.vars = "Common name", variable.name = "Stage", value.name = "Range")
+
+```
+
+Split the "Range" column into a minimum and maximum depth. Empty columns to be turned into NAs.
+
+```{r}
+
+FMP.long <- FMP.long %>% separate(
+  col = Range,
+  into = c("Min", "Max")
+)
+
+FMP.long[FMP.long == ""] <- NA
+
+names(FMP.long)[1] <- "Species"
+
+```
+We do not need definitions as "Pelagic" etc. because we are after depth ranges of demersal or benthic animals here. So drop the characters and convert to numeric for plot.
+
+```{r}
+
+drop.chars <- function(x) {
+  
+  if(is.na(x)) {
+    x <- NA
+  } else {
+    if (nchar(x) > 4) {
+      x <- NA
+    } else {
+      x <- x
+    }
+    
+  }
+  
+}
+
+FMP.long$Min <- as.numeric(unlist(sapply(FMP.long$Min, drop.chars)))
+FMP.long$Max <- as.numeric(FMP.long$Max)
+FMP.long$Species <- factor(FMP.long$Species, levels = unique(FMP.long$Species))
+
+```
+
+Plot the data throughout the water column (as deep as 3000 m).
+
+```{r}
+
+p3000 <- ggplot(data = FMP.long, aes(x = Species, colour = Stage))+
+  geom_linerange(aes(ymin = Min, ymax = Max), position = position_dodge(width = 0.9))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),,
+        text = element_text(size = 16),
+        panel.grid = element_blank())
+p3000
+
+```
+
+Shortspine thornyhead and octopus are the only two species going deeper than 1000 m. Restrict plot to first 1200 m as most species are fouind within that range.
+
+```{r}
+
+z <- c(0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 1000, 1200) # these are some depth breaks to visualise on the plot for reference
+
+p1200 <- ggplot(data = FMP.long, aes(x = Species, colour = Stage))+
+  geom_linerange(aes(ymin = Min, ymax = Max), position = position_dodge(width = 0.9))+
+  geom_hline(yintercept = z, color = "grey")+
+  scale_y_continuous(limits = c(0, 1200), breaks = seq(0, 1200, 100))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),,
+        text = element_text(size = 16),
+        panel.grid = element_blank())
+p1200
+
+```
+
+Some of the significant depth breaks below:
+
+__50 m__: Early juveniles of Yellowfin sole, Northen, and Southern rock sole (so a few flatfishes) are found 0-50 m. Late juveniles and adults of Dover soles and shortspine thornyhead rockfish start at 50 m.
+
+__100 m__: Early juveniles of flathead sole and arrowtooth flounder are not found deeper than 100 m. Plus, it is the shallowest a number of rockfish species are distributed to, at different life stages. 
+
+__200 m__: Important break. Deepest margin of the juvenile stages of walleye pollock, and for all life stages of Pacific cod, Yellowfin sole, Northern and Southern rock sole, Alaska plaice, Rex sole, and flathead sole (so most fishes of the flatfish complex), as well as of the juvenile stages of some rockfish species and Atka mackerel. It is also the shallowest margin of the distribution of juvenile sablefish.
+
+__500 m__: Deepest margin of the distribution of Dover sole, arrowtooth flounder, Pacific Ocean perch, most rockfish species, juvenile stages of skates, and adult stages of sculpins.
+
+__800 m__: deepest margin of distribution of adult sablefish.
+
+__1000 m__: Deepest margin of the distribution of walleye pollock, skates, squid, and shortspine thornyhead rockfish.
+
+# Section 2. Depth ranges from literature.
+
+Read input.
+
+```{r}
+
+gs4_deauth() # do not prompt google authentication
+
+Lit.data <- read_sheet("https://docs.google.com/spreadsheets/d/1YJnz2yS42txHQ_tSls6edW8jv553DwQSlSU4corQ0x0/edit#gid=362642674", sheet = 1) %>% dplyr::select(
+  Species, DepthAdult:Depth90
+)
+
+```
+
+Prepare the data as long format.
+
+```{r}
+
+Lit.long <- melt(Lit.data, id.vars = "Species", variable.name = "Set", value.name = "Range")
+
+```
+
+Split the "Range" column into a minimum and maximum depth. Turn into numeric.
+
+```{r}
+
+Lit.long <- Lit.long %>% separate(
+  col = Range,
+  into = c("Min", "Max")
+)
+
+Lit.long$Max <- as.numeric(Lit.long$Max)
+Lit.long$Min <- as.numeric(Lit.long$Min)
+
+```
+
+```{r}
+
+z1 <- seq(0, 1000, 50)
+
+p.Lit <- ggplot(data = Lit.long, aes(x = Species, colour = Set))+
+  geom_linerange(aes(ymin = Min, ymax = Max), position = position_dodge(width = 0.9))+
+  geom_hline(yintercept = z1, color = "grey")+
+  scale_y_continuous(limits = c(0, 1400), breaks = seq(0, 1400, 100))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        text = element_text(size = 16),
+        panel.grid = element_blank())
+p.Lit
+
+```
+
+Not as clear-cut as Section 1.
+
+__50 m__: may be used as "soft" lower break for juvenile Pacific cod, which is in the shallows, and "soft" upper break for juvenile arrowtooth flounder, as well as shallow limit of the common depth for Pacific halibut.
+
+__100 m__: Upper limit for where walley pollock is commonly found, as well as sablefish, pacific cod and arrowtooth flounder. 
+
+__150 m__: quite commonly mentioned as a break for common occurrences of arrowtooth flounder, pacific cod, sablefish, and walleye pollock. We may have to drop this one as too many breaks will be detrimental to our model, and stick with the 200 m break as above.
+
+__200 m__: Lower liit for common depth range of Pacific ocean perch. 
+
+__300 m__: Lower limit for 90% occurrences of pacific cod, pacific halibut, and walleye pollock; lower limit of juvenile habitat for sablefish and walleye pollock. Important break here, not so much above.
+
+__400 m__: lower limit for 90% occurrences of arrowtooth flounder, and somewhat coinciding with the lower limit for this species (~475 m) according to Allen and Smith (1988). ALso close to lower limit of 90% occurrences of POP. Arguably though, 500 m would do just as fine for the last two.
+
+__800-900 m__: lower limit for pacific cod, pacific halibut, and POP. 
+
+
+# Conclusions
+
+So important breaks from this analysis appeared to be 50 m, 100 m, 150 m, 200 m, 300 m, 400 m, 500 m, 800 m, and 1000 m. 
+
+Typically you loose resolution as you go deeper, so probably 50-100-200-400-500-800 is difficult to justify because you skip 300 and then still have breaks at 400 and 500 (can do, but is there a really good reason for it?). 
+
+A good starting point may be:
+
+0-50, 50-100, 100-200, 200-500, 500-800, 800-1200, 1200-Bottom (open layer). May discuss about the lats isobath, whether 1000 or deeper (may do 800-1600, or whatever else is appropriate). Not too dissimilar from CC model. This setup would correspond to 7 depth layers.
+
+In addition, the Ecopath model for the GOA prsented in Aydin et al. (2007) and Gaichas et al. (2010) has four significant depth delimitations (or loose definitions):
+
+*There are nine spatial strata in the GOA model, representing three very general habitat types in each of three geographical sections (Fig 2b). The habitat types are defined as “shelf” habitats from 50-200 m depth, “gully” habitats from 100-200+ m depth, and “slope” habitats from 200-1,000 m depth. The distinction between “gully” and “slope” habitats is defined according to the trawl survey strata; in general, gully habitats are deep areas within the continental shelf surrounded by shallower shelf areas, whereas slope habitats are found at the seaward margin of the continental shelf.*
+
+So 50, 100, 200, and 1000 may be backed up by this too.
+
+__Importantly__, the Bottom Trawl Surveys in the GOA (https://www.fisheries.noaa.gov/alaska/commercial-fishing/alaska-groundfish-bottom-trawl-survey-data) still uses the depth strata defined in Britt LL, Martin MH (2001) Data Report: 1999 Gulf of Alaska Bottom Trawl Survey. NOAA Technical Memorandum NMFS-AFSC-121, and still followed after 2010 (von Szalay PG, Raring NW, Shaw FR, Wilkins ME, Martin MH (2010) Data Report: 2009 Gulf of Alaska Bottom Trawl Survey). These strata were defined at depths of 1-100, 101-200, 201-300, 301-500, 501-700, 701-1000. It would be good to have a break at 50 m too, to differentiate shallow areas that are important for juveniles. So this is rather similar to the above, with the exception that currently we do not have a break at 300 m, and we have one at 800 m instead of 700 m. Adding a break at 300 is doable, but we'd have to sacrifice another one. Basically the BTS has one strata too many, if we want to have a 0-50 m stratum (which we do I think), because we also need to ocunt the last open-face bottom layer for Atlantis. 
+__NOTE__: I have not been able to locate information on how deep each fishery goes, except for halibut from IPHC. This may be something we want to look into more, as if there is a clear depth curt-off or restriction for some important bottom fishery, we may want to consider that cutoff for our isobaths.
